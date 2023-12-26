@@ -15,11 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class Polestar:
-    def __init__(self,
-                 hass: HomeAssistant,
-                 username: str,
-                 password: str
-                 ) -> None:
+    def __init__(self, hass: HomeAssistant, username: str, password: str) -> None:
         self.id = None
         self.name = "Polestar "
         self.polestarApi = PolestarApi(username, password)
@@ -28,7 +24,7 @@ class Polestar:
 
     async def init(self):
         await self.polestarApi.init()
-        vin = self.get_value('getConsumerCarsV2', 'vin', True)
+        vin = self.get_value("getConsumerCarsV2", "vin", True)
         if vin:
             # fill the vin and id in the constructor
             self.vin = vin

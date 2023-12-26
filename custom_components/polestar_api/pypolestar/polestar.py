@@ -3,7 +3,12 @@ import httpx
 
 from datetime import datetime, timedelta
 
-from .exception import PolestarApiException, PolestarAuthException, PolestarNoDataException, PolestarNotAuthorizedException
+from .exception import (
+    PolestarApiException,
+    PolestarAuthException,
+    PolestarNoDataException,
+    PolestarNotAuthorizedException,
+)
 from .auth import PolestarAuth
 from .const import CACHE_TIME, BATTERY_DATA, CAR_INFO_DATA, ODO_METER_DATA
 
@@ -11,7 +16,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class PolestarApi:
-
     def __init__(self, username: str, password: str) -> None:
         self.auth = PolestarAuth(username, password)
         self.updating = False
@@ -33,7 +37,7 @@ class PolestarApi:
 
     def get_latest_data(self, query: str, field_name: str) -> dict or bool or None:
         if self.cache_data and self.cache_data[query]:
-            data = self.cache_data[query]['data']
+            data = self.cache_data[query]["data"]
             if data is None:
                 return False
             return self._get_field_name_value(field_name, data)
@@ -42,8 +46,8 @@ class PolestarApi:
         if field_name is None or data is None:
             return None
 
-        if '/' in field_name:
-            field_names = field_name.split('/')
+        if "/" in field_name:
+            field_names = field_name.split("/")
             for key in field_names:
                 if isinstance(data, dict) and key in data:
                     data = data[key]
@@ -60,57 +64,65 @@ class PolestarApi:
         params = {
             "query": "query GetOdometerData($vin: String!) { getOdometerData(vin: $vin) { averageSpeedKmPerHour eventUpdatedTimestamp { iso unix __typename } odometerMeters tripMeterAutomaticKm tripMeterManualKm __typename }}",
             "operationName": "GetOdometerData",
-            "variables": "{\"vin\":\"" + vin + "\"}"
+            "variables": '{"vin":"' + vin + '"}',
         }
         result = await self.get_graph_ql(params)
 
-        if result and result['data']:
+        if result and result["data"]:
             # put result in cache
             self.cache_data[ODO_METER_DATA] = {
-                'data': result['data'][ODO_METER_DATA], 'timestamp': datetime.now()}
+                "data": result["data"][ODO_METER_DATA],
+                "timestamp": datetime.now(),
+            }
 
     async def _get_battery_data(self, vin: str):
         params = {
             "query": "query GetBatteryData($vin: String!) {  getBatteryData(vin: $vin) {    averageEnergyConsumptionKwhPer100Km    batteryChargeLevelPercentage    chargerConnectionStatus    chargingCurrentAmps    chargingPowerWatts    chargingStatus    estimatedChargingTimeMinutesToTargetDistance    estimatedChargingTimeToFullMinutes    estimatedDistanceToEmptyKm    estimatedDistanceToEmptyMiles    eventUpdatedTimestamp {      iso      unix      __typename    }    __typename  }}",
             "operationName": "GetBatteryData",
-            "variables": "{\"vin\":\"" + vin + "\"}"
+            "variables": '{"vin":"' + vin + '"}',
         }
 
         result = await self.get_graph_ql(params)
 
-        if result and result['data']:
+        if result and result["data"]:
             # put result in cache
             self.cache_data[BATTERY_DATA] = {
-                'data': result['data'][BATTERY_DATA], 'timestamp': datetime.now()}
+                "data": result["data"][BATTERY_DATA],
+                "timestamp": datetime.now(),
+            }
 
     async def _get_vehicle_data(self):
         # get Vehicle Data
         params = {
             "query": "query getCars {  getConsumerCarsV2 {    vin    internalVehicleIdentifier    modelYear    content {      model {        code        name        __typename      }      images {        studio {          url          angles          __typename        }        __typename      }      __typename    }    hasPerformancePackage    registrationNo    deliveryDate    currentPlannedDeliveryDate    __typename  }}",
             "operationName": "getCars",
-            "variables": "{}"
+            "variables": "{}",
         }
 
         result = await self.get_graph_ql(params)
-        if result and result['data']:
+        if result and result["data"]:
             # check if there are cars in the account
-            if result['data'][CAR_INFO_DATA] is None or len(result['data'][CAR_INFO_DATA]) == 0:
+            if (
+                result["data"][CAR_INFO_DATA] is None
+                or len(result["data"][CAR_INFO_DATA]) == 0
+            ):
                 _LOGGER.exception("No cars found in account")
                 # throw new exception
                 raise PolestarNoDataException("No cars found in account")
 
             self.cache_data[CAR_INFO_DATA] = {
-                'data': result['data'][CAR_INFO_DATA][0], 'timestamp': datetime.now()}
+                "data": result["data"][CAR_INFO_DATA][0],
+                "timestamp": datetime.now(),
+            }
 
     async def get_ev_data(self, vin: str):
         if self.updating:
             return
 
         self.updating = True
-
         try:
-            if self.auth.token_expiry < datetime.now():
-                await self.auth.get_token()
+            if (self.auth.token_expiry - datetime.now()).total_seconds() < 300:
+                await self.auth.get_token(refresh=True)
         except PolestarAuthException as e:
             self.latest_call_code = 500
             _LOGGER.warning("Auth Exception: %s", str(e))
@@ -124,8 +136,7 @@ class PolestarApi:
                 await self.auth.get_token()
             except PolestarApiException as e:
                 self.latest_call_code = 500
-                _LOGGER.warning('Failed to get %s data %s',
-                                func.__name__, str(e))
+                _LOGGER.warning("Failed to get %s data %s", func.__name__, str(e))
 
         await call_api(lambda: self._get_odometer_data(vin))
         await call_api(lambda: self._get_battery_data(vin))
@@ -138,16 +149,20 @@ class PolestarApi:
 
         if self.cache_data and self.cache_data.get(query):
             cache_entry = self.cache_data[query]
-            data = cache_entry['data']
+            data = cache_entry["data"]
             if data is not None:
-                if skip_cache is False or cache_entry['timestamp'] + timedelta(seconds=CACHE_TIME) > datetime.now():
+                if (
+                    skip_cache is False
+                    or cache_entry["timestamp"] + timedelta(seconds=CACHE_TIME)
+                    > datetime.now()
+                ):
                     return self._get_field_name_value(field_name, data)
         return None
 
     async def get_graph_ql(self, params: dict):
         headers = {
             "Content-Type": "application/json",
-            "authorization": f"Bearer {self.auth.access_token}"
+            "authorization": f"Bearer {self.auth.access_token}",
         }
 
         url = "https://pc-api.polestar.com/eu-north-1/my-star/"
@@ -161,9 +176,9 @@ class PolestarApi:
             raise PolestarApiException(f"Get GraphQL error: {result.text}")
 
         resultData = result.json()
-        if resultData.get('errors'):
+        if resultData.get("errors"):
             self.latest_call_code = 500
-            error_message = resultData['errors'][0]['message']
+            error_message = resultData["errors"][0]["message"]
             if error_message == "User is not authorized":
                 raise PolestarNotAuthorizedException("Unauthorized Exception")
             _LOGGER.error(error_message)
