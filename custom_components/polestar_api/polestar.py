@@ -13,6 +13,14 @@ POST_HEADER_JSON = {"Content-Type": "application/json"}
 
 _LOGGER = logging.getLogger(__name__)
 
+class DictObj:
+    def __init__(self, in_dict:dict):
+        assert isinstance(in_dict, dict)
+        for key, val in in_dict.items():
+            if isinstance(val, (list, tuple)):
+                setattr(self, key, [DictObj(x) if isinstance(x, dict) else x for x in val])
+            else:
+                setattr(self, key, DictObj(val) if isinstance(val, dict) else val)
 
 class Polestar:
     def __init__(self,
@@ -23,17 +31,16 @@ class Polestar:
         self.id = None
         self.name = "Polestar "
         self.polestarApi = PolestarApi(username, password)
-        self.vin = None
+        self.vehicle = DictObj({})
         disable_warnings()
 
     async def init(self):
         await self.polestarApi.init()
-        vin = self.get_value('getConsumerCarsV2', 'vin', True)
-        if vin:
+        self.vehicle = DictObj(self.polestarApi.get_vehicle_data())
+        if self.vehicle and hasattr(self.vehicle, 'vin'):
             # fill the vin and id in the constructor
-            self.vin = vin
-            self.id = vin[:8]
-            self.name = "Polestar " + vin[-4:]
+            self.id = self.vehicle.vin[:8]
+            self.name = "Polestar " + self.vehicle.vin[-4:]
 
     def get_latest_data(self, query: str, field_name: str):
         return self.polestarApi.get_latest_data(query, field_name)
@@ -47,14 +54,14 @@ class Polestar:
 
     async def async_update(self) -> None:
         try:
-            await self.polestarApi.get_ev_data(self.vin)
+            await self.polestarApi.get_ev_data(self.vehicle.vin)
         except PolestarApiException as e:
             _LOGGER.warning("API Exception on update data %s", str(e))
         except PolestarAuthException as e:
             _LOGGER.warning("Auth Exception on update data %s", str(e))
 
-    def get_value(self, query: str, field_name: str, skip_cache: bool = False):
-        data = self.polestarApi.get_cache_data(query, field_name, skip_cache)
+    def get_value(self, query: str, field_name: str):
+        data = self.polestarApi.get_cache_data(query, field_name)
         if data is None:
             return
         return data
