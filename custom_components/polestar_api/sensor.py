@@ -252,7 +252,7 @@ POLESTAR_SENSOR_TYPES: Final[tuple[PolestarSensorDescription, ...]] = (
         key="vin",
         name="VIN",
         icon="mdi:card-account-details",
-        query="getConsumerCarsV2",
+        query=None,
         field_name="vin",
         unit=None,
         round_digits=None,
@@ -263,8 +263,8 @@ POLESTAR_SENSOR_TYPES: Final[tuple[PolestarSensorDescription, ...]] = (
         key="registration_number",
         name="Registration number",
         icon="mdi:numeric-1-box",
-        query="getConsumerCarsV2",
-        field_name="registrationNo",
+        query=None,
+        field_name="registration_no",
         unit=None,
         round_digits=None,
         max_value=None,
@@ -286,8 +286,8 @@ POLESTAR_SENSOR_TYPES: Final[tuple[PolestarSensorDescription, ...]] = (
     PolestarSensorDescription(
         key="model_name",
         name="Model name",
-        query="getConsumerCarsV2",
-        field_name="content/model/name",
+        query=None,
+        field_name="model_name",
         unit=None,
         round_digits=None,
         max_value=None,
@@ -397,7 +397,7 @@ class PolestarSensor(PolestarEntity, SensorEntity):
         super().__init__(device)
         self._device = device
         # get the last 4 character of the id
-        unique_id = device.vin[-4:]
+        unique_id = device.vehicle.vin[-4:]
         self.entity_id = f"{POLESTAR_API_DOMAIN}.'polestar_'.{unique_id}_{description.key}"
         self._attr_name = f"{description.name}"
         self._attr_unique_id = f"polestar_{unique_id}-{description.key}"
@@ -415,15 +415,11 @@ class PolestarSensor(PolestarEntity, SensorEntity):
         """Get the current value."""
         return self.async_update()
 
-    def get_skip_cache(self) -> bool:
-        """Get the skip cache."""
-        return self.description.key in ('vin', 'registration_number', 'model_name')
-
     @callback
     def _async_update_attrs(self) -> None:
         """Update the state and attributes."""
         self._attr_native_value = self._device.get_value(
-            self.description.query, self.description.field_name, self.get_skip_cache())
+            self.description.query, self.description.field_name)
 
     @property
     def unique_id(self) -> str:
@@ -455,6 +451,8 @@ class PolestarSensor(PolestarEntity, SensorEntity):
     @property
     def state(self) -> StateType:
         """Return the state of the sensor."""
+        if self.entity_description.field_name and hasattr(self._device.vehicle, self.entity_description.field_name):
+            return getattr(self._device.vehicle, self.entity_description.field_name)
         if self.entity_description.dict_data is not None:
             # exception for api_status_code
             if self.entity_description.key == 'api_status_code':
@@ -529,4 +527,4 @@ class PolestarSensor(PolestarEntity, SensorEntity):
         """Get the latest data and updates the states."""
         await self._device.async_update()
         self._attr_native_value = self._device.get_value(
-            self.description.query, self.description.field_name, self.get_skip_cache())
+            self.description.query, self.description.field_name)

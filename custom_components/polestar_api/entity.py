@@ -13,11 +13,12 @@ class PolestarEntity(Entity):
     def __init__(self, device: Polestar) -> None:
         """Initialize the Polestar entity."""
         self._device = device
+        self.vehicle = self._device.vehicle
 
         self._attr_device_info = DeviceInfo(
             identifiers={(POLESTAR_API_DOMAIN, self._device.name)},
             manufacturer="Polestar",
-            model=None,
+            model=self.vehicle.model_name,
             name=device.name,
             sw_version=None,
         )

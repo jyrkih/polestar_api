@@ -16,6 +16,7 @@ class PolestarApi:
         self.auth = PolestarAuth(username, password)
         self.updating = False
         self.cache_data = {}
+        self.vehicle_data = {}
         self.latest_call_code = None
         self._client_session = httpx.AsyncClient()
 
@@ -99,8 +100,27 @@ class PolestarApi:
                 # throw new exception
                 raise PolestarNoDataException("No cars found in account")
 
-            self.cache_data[CAR_INFO_DATA] = {
-                'data': result['data'][CAR_INFO_DATA][0], 'timestamp': datetime.now()}
+            vehicle_data = result['data'][CAR_INFO_DATA][0]
+            vehicle = {}
+            if 'vin' in vehicle_data:
+                vehicle['vin'] = vehicle_data['vin']
+            if 'modelYear' in vehicle_data:
+                vehicle['model_year'] = vehicle_data['modelYear']
+            if 'registrationNo' in vehicle_data:
+                vehicle['registration_no'] = vehicle_data['registrationNo']
+            if 'content' in vehicle_data and 'model' in vehicle_data['content'] and 'name' in vehicle_data['content']['model']:
+                vehicle['model_name'] = vehicle_data['content']['model']['name']
+            if 'content' in vehicle_data and 'images' in vehicle_data['content'] and 'studio' in vehicle_data['content']['images'] and 'url' in vehicle_data['content']['images']['studio']:
+                vehicle['image_url'] = vehicle_data['content']['images']['studio']['url']
+
+            self.vehicle_data[CAR_INFO_DATA] = {
+                'data': vehicle,
+                'timestamp': datetime.now()
+            }
+
+
+    def get_vehicle_data(self):
+        return self.vehicle_data[CAR_INFO_DATA]["data"]
 
     async def get_ev_data(self, vin: str):
         if self.updating:
@@ -132,7 +152,7 @@ class PolestarApi:
 
         self.updating = False
 
-    def get_cache_data(self, query: str, field_name: str, skip_cache: bool = False):
+    def get_cache_data(self, query: str, field_name: str):
         if query is None:
             return None
 
@@ -140,7 +160,7 @@ class PolestarApi:
             cache_entry = self.cache_data[query]
             data = cache_entry['data']
             if data is not None:
-                if skip_cache is False or cache_entry['timestamp'] + timedelta(seconds=CACHE_TIME) > datetime.now():
+                if cache_entry['timestamp'] + timedelta(seconds=CACHE_TIME) > datetime.now():
                     return self._get_field_name_value(field_name, data)
         return None
 
